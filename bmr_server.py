@@ -11,6 +11,7 @@ Endpoints:
   POST /analyse       — full BMR analysis for a symbol
   POST /analyse/multi — multi-symbol sweep (basket analysis)
   GET  /api/nu_score  — text-domain coherence ν score (tab_scout integration)
+  POST /api/audio_scale — spectral coherence → BMR scale mapping (kindpath-q)
 
 Usage:
   export FRED_API_KEY=your_key_here
@@ -257,7 +258,7 @@ async def root():
         "name":    "BMR Signal Server",
         "version": SERVER_VERSION,
         "equation": "M = [(Participant × Institutional × Sovereign) · ν]²",
-        "endpoints": ["/ping", "/status", "/analyse", "/analyse/multi", "/api/nu_score"],
+        "endpoints": ["/ping", "/status", "/analyse", "/analyse/multi", "/api/nu_score", "/api/audio_scale"],
     }
 
 
@@ -300,6 +301,121 @@ async def analyse(req: AnalyseRequest):
     except Exception as e:
         logger.error(f"Analysis failed for {req.symbol}: {traceback.format_exc()}")
         raise HTTPException(500, f"Analysis error: {str(e)}")
+
+
+@app.post("/api/audio_scale")
+async def audio_scale(data: dict):
+    """
+    D5 — Spectral Coherence → BMR scale mapping.
+
+    Accepts a JSON payload of audio analysis fields from KindPath Q's
+    SpectralResult + HarmonicResult and maps them onto the P × I × S
+    scale model to compute a creative-field ν coherence score.
+
+    Mapping doctrine:
+      Participant  = harmonicRatio        (tonal human signal vs noise)
+      Institutional = 1 - tensionRatio    (structural coherence, low tension = stable)
+      Sovereign    = harmonicComplexity   (creative sovereignty: depth of authorship)
+
+    High ν = spectral energy, structural stability, and creative complexity
+    are all simultaneously present — a coherent creative field.
+
+    Accepts:
+      {
+        "harmonic_ratio":     float,  # 0-1, from SpectralResult.harmonicRatio
+        "tension_ratio":      float,  # 0-1, from HarmonicResult.tensionRatio
+        "harmonic_complexity": float, # 0-1, from HarmonicResult.harmonicComplexity
+        "dynamic_range_db":   float,  # optional, from DynamicResult.dynamicRangeDb
+        "groove_deviation_ms": float, # optional, from TemporalResult.grooveDeviationMs
+        "lsii":               float,  # optional, late-song inversion index
+        "label":              str,    # optional, e.g. "track title"
+      }
+
+    Returns: {"nu": float, "field_state": str, "scale_values": {...},
+              "direction": float, "interpretation": str}
+    """
+    # ── Extract fields with safe defaults ────────────────────────────────────
+    harmonic_ratio      = float(data.get("harmonic_ratio",      0.5))
+    tension_ratio       = float(data.get("tension_ratio",       0.5))
+    harmonic_complexity = float(data.get("harmonic_complexity", 0.5))
+    dynamic_range_db    = float(data.get("dynamic_range_db",    8.0))
+    groove_deviation_ms = float(data.get("groove_deviation_ms", 10.0))
+    lsii                = float(data.get("lsii",                0.0))
+    label               = str(data.get("label", "audio input"))
+
+    # Clamp all inputs to legal range
+    harmonic_ratio      = max(0.0, min(1.0, harmonic_ratio))
+    tension_ratio       = max(0.0, min(1.0, tension_ratio))
+    harmonic_complexity = max(0.0, min(1.0, harmonic_complexity))
+
+    # ── Map to P / I / S scale readings (-1.0 → +1.0) ───────────────────────
+    # Participant: how much tonal/human signal is present?
+    # harmonicRatio 1.0 = fully tonal (max positive)
+    # harmonicRatio 0.0 = pure noise (max negative)
+    p_value = (harmonic_ratio * 2.0) - 1.0   # rescale [0,1] → [-1,1]
+    p_conf  = 0.75  # audio data is TESTABLE evidence
+
+    # Institutional: structural stability in the harmonic field
+    # Low tension = stable/aligned (positive); high tension = compressed (negative)
+    # Dynamic range bonus: >12dB = healthy (+), <6dB = loudness war (-)
+    dr_factor = max(-0.3, min(0.3, (dynamic_range_db - 9.0) / 20.0))
+    i_value   = (1.0 - tension_ratio) * 2.0 - 1.0 + dr_factor
+    i_value   = max(-1.0, min(1.0, i_value))
+    i_conf    = 0.70
+
+    # Sovereign: creative depth and autonomy
+    # harmonicComplexity in the sweet spot (0.4–0.7) = sovereign authorship
+    # Too simple (< 0.2) = formula; too chaotic (> 0.9) = indeterminate
+    # Groove deviation bonus: human timing (>5ms) adds authenticity
+    groove_authentic = min(0.25, (groove_deviation_ms - 3.0) / 40.0) if groove_deviation_ms > 3.0 else 0.0
+    s_raw   = 0.5 - abs(harmonic_complexity - 0.55) * 1.5 + groove_authentic
+    s_value = max(-1.0, min(1.0, s_raw * 2.0 - 0.5))
+    s_conf  = 0.65
+
+    # ── Construct ScaleReadings and run ν ────────────────────────────────────
+    from core.normaliser import ScaleReading
+    from core.nu_engine  import compute_nu
+
+    p_reading = ScaleReading(scale="PARTICIPANT",   value=p_value, confidence=p_conf, source_count=1,
+                             source_detail={"harmonic_ratio": harmonic_ratio})
+    i_reading = ScaleReading(scale="INSTITUTIONAL", value=i_value, confidence=i_conf, source_count=2,
+                             source_detail={"tension_ratio": tension_ratio, "dynamic_range_db": dynamic_range_db})
+    s_reading = ScaleReading(scale="SOVEREIGN",     value=s_value, confidence=s_conf, source_count=2,
+                             source_detail={"harmonic_complexity": harmonic_complexity, "groove_deviation_ms": groove_deviation_ms})
+
+    nu_result = compute_nu(p_reading, i_reading, s_reading)
+
+    # ── Interpretation ───────────────────────────────────────────────────────
+    if nu_result.nu >= 0.75:
+        interp = "Coherent creative field — tonal energy, structural stability, and authorship are aligned."
+    elif nu_result.nu >= 0.40:
+        if lsii > 0.4:
+            interp = "Transitional field with notable late-song inversion — something shifted in the final section."
+        else:
+            interp = "Transitional creative field — scales partially aligned, some dissonance present."
+    elif nu_result.nu >= 0.15:
+        interp = "Compressed field — energy is present but suppressed. Hypercompression or heavy quantisation signature."
+    else:
+        interp = "Coherence collapse — the scales are not singing the same song."
+
+    return {
+        "nu":          round(nu_result.nu, 3),
+        "field_state": nu_result.field_state,
+        "direction":   round(nu_result.direction, 3),
+        "scale_values": {
+            "participant":   round(p_value, 3),
+            "institutional": round(i_value, 3),
+            "sovereign":     round(s_value, 3),
+        },
+        "scale_confidences": {
+            "participant":   p_conf,
+            "institutional": i_conf,
+            "sovereign":     s_conf,
+        },
+        "lsii_modifier": lsii,
+        "label":        label,
+        "interpretation": interp,
+    }
 
 
 @app.get("/api/nu_score")

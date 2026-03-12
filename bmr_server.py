@@ -10,6 +10,7 @@ Endpoints:
   GET  /status        — capability report
   POST /analyse       — full BMR analysis for a symbol
   POST /analyse/multi — multi-symbol sweep (basket analysis)
+  GET  /api/nu_score  — text-domain coherence ν score (tab_scout integration)
 
 Usage:
   export FRED_API_KEY=your_key_here
@@ -256,7 +257,7 @@ async def root():
         "name":    "BMR Signal Server",
         "version": SERVER_VERSION,
         "equation": "M = [(Participant × Institutional × Sovereign) · ν]²",
-        "endpoints": ["/ping", "/status", "/analyse", "/analyse/multi"],
+        "endpoints": ["/ping", "/status", "/analyse", "/analyse/multi", "/api/nu_score"],
     }
 
 
@@ -299,6 +300,97 @@ async def analyse(req: AnalyseRequest):
     except Exception as e:
         logger.error(f"Analysis failed for {req.symbol}: {traceback.format_exc()}")
         raise HTTPException(500, f"Analysis error: {str(e)}")
+
+
+@app.get("/api/nu_score")
+async def nu_score_text(text: str = ""):
+    """
+    Text-domain coherence ν score for KindPath relevance.
+
+    Interprets ν as cross-domain coherence: how many KindPath domains does
+    this text simultaneously engage? Multi-domain signal = high ν, mirroring
+    the financial ν where P × I × S coherence amplifies the field.
+
+    Used by kindai/missions/tab_scout.py to weight page relevance against the
+    KindPath knowledge base before ingestion.
+
+    Returns {"nu": float, "domains_active": list, "matched_terms": list}
+    """
+    import math
+
+    # Domain vocabulary — each domain is a conceptual "scale" in the ν model
+    _DOMAIN_VOCAB: dict[str, list[str]] = {
+        "ndis_care": [
+            "ndis", "participant", "support worker", "disability", "care plan",
+            "allied health", "occupational therapy", "sbas", "plan management",
+            "capacity building", "supported independent living", "sil", "ndis provider",
+            "psychosocial", "recovery coach", "plan review", "early childhood",
+        ],
+        "trading_finance": [
+            "dfte", "trading", "kepe", "market", "momentum", "options", "futures",
+            "portfolio", "alpha", "signal", "strategy", "backtest", "hedge",
+            "bitcoin", "crypto", "equity", "forex", "yield", "inflation",
+            "interest rate", "bull", "bear", "liquidity", "volatility",
+        ],
+        "kindpath_mission": [
+            "kindpath", "kindfluence", "kindearth", "kindfield", "kindsense",
+            "bmr", "benevolence", "syntropy", "sovereignty", "collective",
+            "field", "compass", "regenerative", "relational", "lsii",
+        ],
+        "music_audio": [
+            "psychosomatic", "frequency", "spectral", "harmonic", "vocal",
+            "fingerprint", "seedbank", "juce", "daw", "plugin", "vst", "au",
+            "compression", "mix", "master", "producer", "audio",
+            "music", "sound design", "ableton", "logic pro",
+        ],
+        "tech_ai": [
+            "python", "fastapi", "llm", "artificial intelligence", "machine learning",
+            "cloud", "docker", "microservice", "model", "embedding", "vector",
+            "prompt", "agent", "api", "github", "copilot", "automation",
+        ],
+        "study_opportunity": [
+            "research", "study", "paper", "journal", "university", "course",
+            "certification", "learning", "education", "tutorial", "documentation",
+            "grant", "funding", "tender", "proposal", "opportunity", "scholarship",
+        ],
+    }
+
+    if not text:
+        return {"nu": 0.0, "domains_active": [], "matched_terms": []}
+
+    lowered = text.lower()
+
+    domain_scores: dict[str, float] = {}
+    all_matched: list[str] = []
+
+    for domain, terms in _DOMAIN_VOCAB.items():
+        hits = [t for t in terms if t in lowered]
+        if hits:
+            all_matched.extend(hits)
+            # Weight by term specificity (longer/multi-word phrases score higher)
+            score = sum(1.0 + math.log1p(len(t.split())) for t in hits)
+            max_score = sum(1.0 + math.log1p(len(t.split())) for t in terms)
+            domain_scores[domain] = min(score / max_score, 1.0) if max_score else 0.0
+
+    domains_active = [d for d, s in domain_scores.items() if s > 0.05]
+
+    if not domains_active:
+        return {"nu": 0.0, "domains_active": [], "matched_terms": []}
+
+    # ν = cross-domain coherence (mirrors P × I × S model)
+    # Single domain caps at ~0.4; three+ domains pushes toward 1.0
+    n = len(domains_active)
+    domain_strength = sum(domain_scores[d] for d in domains_active) / n
+    coherence_factor = 1.0 - math.exp(-0.8 * n)  # asymptotic approach to 1.0
+
+    nu = round(domain_strength * coherence_factor, 3)
+    nu = min(max(nu, 0.0), 1.0)
+
+    return {
+        "nu":            nu,
+        "domains_active": sorted(domains_active),
+        "matched_terms": sorted(set(all_matched))[:20],
+    }
 
 
 @app.post("/analyse/multi")

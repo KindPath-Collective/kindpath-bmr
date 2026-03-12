@@ -446,7 +446,7 @@ class TestBMRServer:
             "bmr_server",
             os.path.join(os.path.dirname(os.path.dirname(__file__)), "bmr_server.py")
         )
-        mod = importlib.util.load_from_spec(spec)
+        mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         from fastapi.testclient import TestClient
         return TestClient(mod.app)

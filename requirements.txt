@@ -11,13 +11,20 @@ httpx>=0.24.0      # for TestClient
 # Data
 numpy>=1.24.0
 requests>=2.28.0
+pandas>=1.4.0
+python-dateutil>=2.8.2
 
 # Testing
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
 
-# Optional: FRED macro data (free API key at https://fred.stlouisfed.org)
-# Set FRED_API_KEY environment variable before running
+# Dashboard
+streamlit>=1.30.0
+plotly>=5.18.0
+
+# AI
+anthropic>=0.15.0
+python-dotenv>=1.0.0
 
 # Optional: Pydantic (usually installed with FastAPI)
 pydantic>=2.0.0

@@ -1,0 +1,68 @@
+[
+  {
+    "code": "01_011_0107_1_1",
+    "item": "Assistance With Self-Care Activities - Standard - Weekday Daytime",
+    "price": 66.45,
+    "unit": "Hour"
+  },
+  {
+    "code": "01_015_0107_1_1",
+    "item": "Assistance With Self-Care Activities - Standard - Weekday Evening",
+    "price": 73.21,
+    "unit": "Hour"
+  },
+  {
+    "code": "01_013_0107_1_1",
+    "item": "Assistance With Self-Care Activities - Standard - Saturday",
+    "price": 93.50,
+    "unit": "Hour"
+  },
+  {
+    "code": "01_014_0107_1_1",
+    "item": "Assistance With Self-Care Activities - Standard - Sunday",
+    "price": 120.56,
+    "unit": "Hour"
+  },
+  {
+    "code": "01_012_0107_1_1",
+    "item": "Assistance With Self-Care Activities - Standard - Public Holiday",
+    "price": 147.62,
+    "unit": "Hour"
+  },
+  {
+    "code": "01_002_0107_1_1",
+    "item": "Assistance With Self-Care Activities - Night-Time Sleepover",
+    "price": 276.27,
+    "unit": "Each"
+  },
+  {
+    "code": "04_104_0125_6_1",
+    "item": "Access Community Social and Rec Activities - Standard - Weekday Daytime",
+    "price": 66.45,
+    "unit": "Hour"
+  },
+  {
+    "code": "04_103_0125_6_1",
+    "item": "Access Community Social and Rec Activities - Standard - Saturday",
+    "price": 93.50,
+    "unit": "Hour"
+  },
+  {
+    "code": "04_105_0125_6_1",
+    "item": "Access Community Social and Rec Activities - Standard - Sunday",
+    "price": 120.56,
+    "unit": "Hour"
+  },
+  {
+    "code": "07_002_0106_8_3",
+    "item": "Level 2: Coordination Of Supports",
+    "price": 100.14,
+    "unit": "Hour"
+  },
+  {
+    "code": "01_799_0106_1_1",
+    "item": "Provider Travel - Non-Labour Costs",
+    "price": 1.00,
+    "unit": "Km"
+  }
+]

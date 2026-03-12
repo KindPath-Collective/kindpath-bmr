@@ -26,7 +26,7 @@ import sys
 import time
 import logging
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 
 import numpy as np
@@ -42,6 +42,7 @@ from feeds.feeds import (
     OHLCVFeed, MomentumSignal, VolumePressureSignal, OptionsSkewSignal,
     COTSignal, InstitutionalFlowSignal, CreditSpreadSignal,
     MacroSignal, CentralBankSignal, GeopoliticalSignal,
+    FREDMetaSignal,
 )
 from core.normaliser import normalise_scale
 from core.nu_engine import compute_nu, compute_multi_timeframe_nu
@@ -234,7 +235,15 @@ def _run_pipeline(req: AnalyseRequest) -> dict:
         multi_tf=multi_tf,
     )
 
+    # 11. Extended FRED metadata (Sovereign Context)
+    fred_meta = {}
+    try:
+        fred_meta = FREDMetaSignal().compute()
+    except Exception as e:
+        logger.warning(f"FREDMeta computation failed: {e}")
+
     result = _serialise_profile(profile)
+    result["_meta"]["fred_meta"] = fred_meta
     result["_meta"]["elapsed_s"] = round(time.time() - t0, 2)
     return result
 
@@ -253,7 +262,12 @@ async def root():
 
 @app.get("/ping")
 async def ping():
-    return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 @app.get("/status")

@@ -9,3 +9,11 @@ build/
 /tmp/cot_cache_*.csv
 *.log
 .DS_Store
+venv/
+.venv/
+logs/
+
+# Runtime databases
+db/*.db
+db/*.db-shm
+db/*.db-wal
